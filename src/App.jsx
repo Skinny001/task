@@ -1,11 +1,8 @@
 import { useState, useEffect } from "react";
 import { ethers } from "ethers";
-import contractABI from "./abi.json";
-
+import contractABI from "./abi.json"; // Import ABI
 
 const contractAddress = "0x9341C730ceeB5Ead8b44939d56275eC4a7654Cf2";
-const contract = new ethers.Contract(contractAddress, contractABI, signer);
-
 
 export default function TaskApp() {
   const [tasks, setTasks] = useState([]);
@@ -15,44 +12,71 @@ export default function TaskApp() {
   const [contract, setContract] = useState(null);
 
   useEffect(() => {
-    if (window.ethereum) {
-      const provider = new ethers.providers.Web3Provider(window.ethereum);
-      const signer = provider.getSigner();
-      const taskContract = new ethers.Contract(contractAddress, contractABI, signer);
-      setContract(taskContract);
-    }
+    const loadContract = async () => {
+      if (window.ethereum) {
+        try {
+          const provider = new ethers.providers.Web3Provider(window.ethereum);
+          const signer = await provider.getSigner();
+          const taskContract = new ethers.Contract(contractAddress, contractABI, signer);
+          setContract(taskContract);
+        } catch (error) {
+          console.error("Error loading contract:", error);
+        }
+      }
+    };
+
+    loadContract();
   }, []);
 
   const connectWallet = async () => {
-    if (window.ethereum) {
+    if (!window.ethereum) {
+      alert("MetaMask not detected!");
+      return;
+    }
+
+    try {
       const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
       setAccount(accounts[0]);
-      fetchTasks();
+      if (contract) fetchTasks(); // Ensure contract exists before calling it
+    } catch (error) {
+      console.error("Error connecting wallet:", error);
     }
   };
 
   const fetchTasks = async () => {
-    if (contract && account) {
+    if (!contract || !account) return;
+
+    try {
       const myTasks = await contract.getMyTask();
       setTasks(myTasks);
+    } catch (error) {
+      console.error("Error fetching tasks:", error);
     }
   };
 
   const addTask = async () => {
-    if (contract) {
+    if (!contract) return;
+
+    try {
       const tx = await contract.addTask(taskText, taskTitle, false);
       await tx.wait();
       fetchTasks();
       setTaskTitle("");
       setTaskText("");
+    } catch (error) {
+      console.error("Error adding task:", error);
     }
   };
 
   const deleteTask = async (taskId) => {
-    if (contract) {
+    if (!contract) return;
+
+    try {
       const tx = await contract.deleteTask(taskId);
       await tx.wait();
       fetchTasks();
+    } catch (error) {
+      console.error("Error deleting task:", error);
     }
   };
 
@@ -83,14 +107,18 @@ export default function TaskApp() {
             Add Task
           </button>
           <div className="mt-4">
-            {tasks.map((task, index) => (
-              <div key={index} className="border p-2 mb-2 flex justify-between">
-                <span>{task.taskTitle}: {task.taskText}</span>
-                <button className="text-red-500" onClick={() => deleteTask(task.id)}>
-                  Delete
-                </button>
-              </div>
-            ))}
+            {tasks.length === 0 ? (
+              <p>No tasks found</p>
+            ) : (
+              tasks.map((task, index) => (
+                <div key={index} className="border p-2 mb-2 flex justify-between">
+                  <span>{task.taskTitle}: {task.taskText}</span>
+                  <button className="text-red-500" onClick={() => deleteTask(task.id)}>
+                    Delete
+                  </button>
+                </div>
+              ))
+            )}
           </div>
         </div>
       )}
