@@ -10,118 +10,127 @@ export default function TaskApp() {
   const [taskText, setTaskText] = useState("");
   const [account, setAccount] = useState(null);
   const [contract, setContract] = useState(null);
+  const [isDeleted, setIsDeleted] = useState(false);
+  const [message, setMessage] = useState("");
+  async function requestAccount (){
+    await window.ethereum.request({ method: "eth_requestAccounts" }); 
+  }
 
-  useEffect(() => {
-    const loadContract = async () => {
-      if (window.ethereum) {
-        try {
-          const provider = new ethers.providers.Web3Provider(window.ethereum);
-          const signer = await provider.getSigner();
-          const taskContract = new ethers.Contract(contractAddress, contractABI, signer);
-          setContract(taskContract);
-        } catch (error) {
-          console.error("Error loading contract:", error);
-        }
-      }
-    };
 
-    loadContract();
-  }, []);
-
-  const connectWallet = async () => {
-    if (!window.ethereum) {
-      alert("MetaMask not detected!");
-      return;
+  async function connectWallet() {
+ 
+    if (typeof window.ethereum !== "undefined"){
+      await requestAccount();
     }
 
     try {
       const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
       setAccount(accounts[0]);
-      if (contract) fetchTasks(); // Ensure contract exists before calling it
+
+      // Ensure contract is loaded after connecting wallet
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = provider.getSigner();
+      const taskContract = new ethers.Contract(contractAddress, contractABI, signer);
+      setContract(taskContract);
+
+      fetchTasks(taskContract, accounts[0]); // Fetch tasks after connecting
     } catch (error) {
       console.error("Error connecting wallet:", error);
     }
   };
 
-  const fetchTasks = async () => {
-    if (!contract || !account) return;
+  const fetchTasks = async (taskContract, userAccount) => {
+    if (!taskContract) return;
 
     try {
-      const myTasks = await contract.getMyTask();
+      const myTasks = await taskContract.getMyTask();
       setTasks(myTasks);
     } catch (error) {
       console.error("Error fetching tasks:", error);
     }
   };
 
-  const addTask = async () => {
-    if (!contract) return;
+  async function addTask() {
+    if (typeof window.ethereum !== "undefined"){
+      await requestAccount();
+    }
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    const signer = await provider.getSigner();
+    const contract = new ethers.Contract(contractAddress,contractABI,signer)
 
     try {
-      const tx = await contract.addTask(taskText, taskTitle, false);
-      await tx.wait();
-      fetchTasks();
-      setTaskTitle("");
-      setTaskText("");
+      const transation = await contract.addTask(taskText, taskTitle, isDeleted);
+      const receipe = await transation.wait();
+      setMessage("Tasks Added Successful")
     } catch (error) {
-      console.error("Error adding task:", error);
+      setMessage("Error adding task:" + error);
     }
   };
 
   const deleteTask = async (taskId) => {
-    if (!contract) return;
+    if (!contract) {
+      alert("Contract not loaded yet. Try again.");
+      return;
+    }
 
     try {
       const tx = await contract.deleteTask(taskId);
       await tx.wait();
-      fetchTasks();
+      fetchTasks(contract, account);
     } catch (error) {
       console.error("Error deleting task:", error);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 p-4 flex flex-col items-center">
-      <h1 className="text-2xl font-bold mb-4">Task Manager</h1>
-      {!account ? (
-        <button className="px-4 py-2 bg-blue-500 text-white rounded" onClick={connectWallet}>
-          Connect Wallet
-        </button>
-      ) : (
-        <div className="w-full max-w-md">
-          <input
-            type="text"
-            placeholder="Task Title"
-            className="border p-2 w-full mb-2"
-            value={taskTitle}
-            onChange={(e) => setTaskTitle(e.target.value)}
-          />
-          <input
-            type="text"
-            placeholder="Task Description"
-            className="border p-2 w-full mb-2"
-            value={taskText}
-            onChange={(e) => setTaskText(e.target.value)}
-          />
-          <button className="w-full bg-green-500 text-white py-2" onClick={addTask}>
-            Add Task
+    <div className="flex items-center justify-center min-h-screen bg-gray-100">
+      <div className="bg-white shadow-lg rounded-lg p-6 w-full max-w-md">
+        <h1 className="text-2xl font-bold text-center mb-4">Task Manager</h1>
+        {!account ? (
+          <button className="w-full py-2 bg-blue-500 text-white rounded-lg" onClick={connectWallet}>
+            Connect Wallet
           </button>
-          <div className="mt-4">
-            {tasks.length === 0 ? (
-              <p>No tasks found</p>
-            ) : (
-              tasks.map((task, index) => (
-                <div key={index} className="border p-2 mb-2 flex justify-between">
-                  <span>{task.taskTitle}: {task.taskText}</span>
-                  <button className="text-red-500" onClick={() => deleteTask(task.id)}>
-                    Delete
-                  </button>
-                </div>
-              ))
-            )}
+        ) : (
+          <div>
+            <input
+              type="text"
+              placeholder="Task Title"
+              className="border p-2 w-full rounded-lg mb-2"
+              value={taskTitle}
+              onChange={(e) => setTaskTitle(e.target.value)}
+            />
+            <input
+              type="text"
+              placeholder="Task Description"
+              className="border p-2 w-full rounded-lg mb-2"
+              value={taskText}
+              onChange={(e) => setTaskText(e.target.value)}
+            />
+            <select className="border p-2 w-full rounded-lg mb-2" onChange={(e) => setIsDeleted(e.target.value)}>
+              <option value={false}>Not Deleted</option>
+              <option value={true}>Deleted</option>
+            </select>
+            <button className="w-full bg-green-500 text-white py-2 rounded-lg" onClick={addTask}>
+              Add Task
+            </button>
+            <p className="text-green-600 text-center mt-2">{message}</p>
+            <div className="mt-4">
+              {tasks.length === 0 ? (
+                <p className="text-center text-gray-500">No tasks found</p>
+              ) : (
+                tasks.map((task, index) => (
+                  <div key={index} className="border p-3 mb-2 flex justify-between rounded-lg shadow-sm">
+                    <span>{task.taskTitle}: {task.taskText}</span>
+                    <button className="text-red-500" onClick={() => deleteTask(task.id)}>
+                      Delete
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
